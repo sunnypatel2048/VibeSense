@@ -53,7 +53,16 @@ Key goals: Automate reputation tracking for marketing teams and small businesses
 4. Initialize DB schema:
 
     ```bash
-    python src/db.py
+    alembic upgrade head
+    ```
+
+5. Run DB migrations:
+
+    Modify ```model.py``` as needed and then run the following commands,
+
+    ```bash
+    alembic revision --autogenerate -m "description"
+    alembic upgrade head
     ```
 
 ## Running the Project
