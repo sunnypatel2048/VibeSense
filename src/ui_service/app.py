@@ -30,7 +30,7 @@ with st.form(key="input_form"):
     full_name = st.text_input("Full Name", max_chars=50)
     post_url = st.text_input("YouTube Post URL", help="e.g., https://www.youtube.com/watch?v=VIDEO_ID")
     email = st.text_input("Email Address", max_chars=100)
-    duration = st.selectbox("Monitoring Duration", ["1 day 4 hour", "3 days 8 hour", "1 week 24 hour"])
+    duration = st.selectbox("Monitoring Duration", ["1 day 4 hour", "3 days 8 hour", "7 days 24 hour"])
     submit_button = st.form_submit_button(label="Start Monitoring")
 
 if submit_button:
@@ -54,7 +54,7 @@ if submit_button:
             st.success(f"Video Confirmed: {title}")
 
             # Parse Duration
-            match = re.match(r'(\d+) day (\d+) hour', duration)
+            match = re.match(r'(\d+) days? (\d+) hour', duration)
             if not match:
                 raise ValueError("Invalid duration format")
             total_days = int(match.group(1))
