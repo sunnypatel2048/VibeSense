@@ -37,18 +37,12 @@ class UserInput(BaseModel):
     email: EmailStr
     duration: str  # e.g., "1 day 4 hour"
 
-    @validator('post_url')
-    def validate_url(cls, v):
-        if not re.match(r'^https://www\.youtube\.com/watch\?v=[a-zA-Z0-9_-]{11}$', v):
-            raise ValueError('Invalid Post URL')
-        return v
-
 class MonitoringJob(BaseModel):
     job_id: str  # UUID as string
     post_id: str
     post_title: str
-    intervals: timedelta
-    total_duration: timedelta
+    intervals: float
+    total_duration: float
     email: EmailStr
 
 class CommentData(BaseModel):
