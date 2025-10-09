@@ -47,8 +47,8 @@ class MonitoringJob(BaseModel):
     job_id: str  # UUID as string
     post_id: str
     post_title: str
-    intervals: timedelta
-    total_duration: timedelta
+    intervals: float
+    total_duration: float
     email: EmailStr
 
 class CommentData(BaseModel):
