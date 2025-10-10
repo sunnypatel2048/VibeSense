@@ -18,6 +18,7 @@ class MonitoringJobDB(Base):
     email = Column(String, nullable=False)
     intervals_seconds = Column(Float, nullable=False)  # e.g., 14400 for 4 hours
     total_duration_seconds = Column(Float, nullable=False)  # e.g., 86400 for 1 day
+    last_fetched_at = Column(DateTime, default=None)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
 class IntervalResultDB(Base):
