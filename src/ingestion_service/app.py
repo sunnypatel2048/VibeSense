@@ -2,11 +2,6 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 import os
 from celery import Celery
-from src.ingestion_service.youtube_fetcher import fetch_comments
-from src.ingestion_service.preprocessor import preprocess_text
-import json
-import pika
-from tenacity import retry, stop_after_attempt, wait_exponential
 import structlog
 from datetime import datetime
 from sqlalchemy import create_engine
@@ -16,71 +11,45 @@ from src.models import MonitoringJobDB
 load_dotenv()
 DB_URL = os.getenv("DB_URL")
 RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+REDIS_URL = os.getenv("REDIS_URL")
 
-engine = create_engine(DB_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 app = FastAPI(title="Data Ingestion Service")
 logger = structlog.get_logger()
 
 # Celery setup
-celery_app = Celery('ingestion', broker=RABBITMQ_URL, backend='redis://localhost:6379/0')
+celery_app = Celery(
+    'ingestion',
+    broker=RABBITMQ_URL,
+    backend=REDIS_URL,
+    include=['src.ingestion_service.tasks']
+)
 
-@celery_app.task
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=60))
-def process_job(job_data: dict):
-    logger.info("Processing job", job_id=job_data['job_id'])
-    try:
-        # Get DB session
-        db = SessionLocal()
+celery_app.conf.update(
+    task_serializer='json',
+    accept_content=['json'],
+    result_serializer='json',
+    timezone='UTC',
+    enable_utc=True,
+)
 
-        # Query job for last_fetched_at
-        job = db.query(MonitoringJobDB).filter(MonitoringJobDB.job_id == job_data['job_id']).first()
-        last_fetched_at = job.last_fetched_at if job and job.last_fetched_at else None
+# Database setup
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-        # Fetch all comments
-        all_comments = fetch_comments(job_data['post_id'], last_fetched_at)
+# API Endpoints
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
 
-        # Filter new comments (published_at > last_fetched_at)
-        if last_fetched_at:
-            new_comments = [c for c in all_comments if c['published_at'] > last_fetched_at]
-        else:
-            new_comments = all_comments
+@app.post("/ingest/{job_id}")
+async def ingest_manual(job_id: str):
+    """Manual trigger for testing."""
+    from .tasks import process_job
+    process_job.delay({"job_id": job_id, "post_id": "dQw4w9WgXcQ"}) # Mock post_id
+    return {"status": f"Job {job_id} queued for ingestion."}
 
-        if not new_comments:
-            logger.info("No new comments", job_id=job_data['job_id'])
-            return
 
-        # Preprocess comments
-        preprocessed = [preprocess_text(c['text']) for c in new_comments]
-        batches = [preprocessed[i:i + 50] for i in range(0, len(preprocessed), 50)]
 
-        # Metadata for tracibility
-        interval_timestamp = max(c['published_at'] for c in new_comments)
-        metadata = {
-            'job_id': job_data['job_id'],
-            'interval_timestamp': interval_timestamp.isoformat()
-        }
 
-        # Publish batches to RabbitMQ
-        connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
-        channel = connection.channel()
-        channel.queue_declare(queue='analysis_queue', durable=True)
-        for batch in batches:
-            payload = { **metadata, 'batch': batch }
-            channel.basic_publish(
-                exchange='',
-                routing_key='analysis_queue',
-                body=json.dumps(payload)
-            )
-        connection.close()
-
-        new_last_fetched_at = max(c['published_at'] for c in new_comments) if new_comments else datetime.now(datetime.timezone.utc)
-        job.last_fetched_at = new_last_fetched_at
-        db.commit()
-        db.close()
-
-        logger.info("Data ingested and published", job_id=job_data['job_id'])
-    except Exception as e:
-        logger.error("Ingestion failed", job_id=job_data['job_id'], error=str(e))
-        raise
+## how will we handle data ingestion triggers after every intervals?
