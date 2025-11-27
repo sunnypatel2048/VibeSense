@@ -6,7 +6,7 @@ import structlog
 from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from src.models import MonitoringJobDB
+from src.ingestion_service.scheduler import configure_celery_beat
 
 load_dotenv()
 DB_URL = os.getenv("DB_URL")
@@ -33,6 +33,8 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
+configure_celery_beat(celery_app)
+
 # Database setup
 engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -53,3 +55,4 @@ async def ingest_manual(job_id: str):
 
 
 ## how will we handle data ingestion triggers after every intervals?
+## need to add data to monitoring jobs table when message gets pickedup.
