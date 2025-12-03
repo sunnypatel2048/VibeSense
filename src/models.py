@@ -56,12 +56,11 @@ class CommentData(BaseModel):
 
 class AnalysisOutput(BaseModel):
     text: str
-    sentiment: str  # "POSITIVE", "NEGATIVE", "NEUTRAL"
+    sentiment: str  # "POSITIVE", "NEGATIVE"
     confidence: float  # 0.0-1.0
-    summary: str  # Condensed text
 
 class Aggregate(BaseModel):
-    interval_sentiment: float  # Avg score
+    interval_sentiment: float
     overall_sentiment: float
-    ci: Tuple[float, float]  # Confidence interval
-    summary: str  # Combined
+    interval_ci: Tuple[float, float] # confidence interval for the interval
+    overall_ci: Tuple[float, float]
