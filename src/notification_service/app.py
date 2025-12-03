@@ -51,7 +51,7 @@ email_template = Template("""
   <div class="container">
     <div class="header">🚀 VibeSense Alert</div>
     <p>Hi {{user_full_name}},</p>
-    <p>Exciting update! We've analyzed the latest comments on your video <strong>"{{ post_title }}"</strong> up to {{ interval_timestamp }}. Here's what the buzz is saying:</p>
+    <p>Exciting update! We've analyzed the latest comments on your video <strong>"{{ post_title }}"</strong> for the past {{ interval_duration }} hours up to {{ interval_timestamp }}. Here's what the buzz is saying:</p>
 
     <div class="section-title">🌟 Interval Highlights</div>
     <div class="highlight-card">
@@ -79,7 +79,7 @@ email_template = Template("""
 async def notify_manual(job_id: str, aggregate: Aggregate):
     """Manual email trigger for testing."""
     # Note: full_name variable is not passed to send_email in the original implementation
-    send_email("Test User", "Test Post Title", aggregate, datetime.now(timezone.utc).isoformat(), "test@domain.com")
+    send_email("Test User", "Test Post Title", aggregate, 1.0, datetime.now(timezone.utc).isoformat(), "test@domain.com")
     return {"status": "Email sent"}
 
 # Queue Consumer (Run in Worker Process)
@@ -105,9 +105,10 @@ def run_consumer():
                 user_full_name = job.user_full_name
                 email = job.email
                 post_title = job.post_title
+                interval_duration = job.intervals_seconds / 3600
                 interval_timestamp = metadata.get('interval_timestamp')
 
-                send_email(user_full_name, post_title, aggregate, interval_timestamp, email)
+                send_email(user_full_name, post_title, aggregate, interval_duration, interval_timestamp, email)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 logger.info("Email sent", job_id=metadata.get('job_id'))
             except Exception as e:
@@ -122,7 +123,7 @@ def run_consumer():
 
     consume()
 
-def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, interval_timestamp: str, to_email: str):
+def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, interval_duration: float, interval_timestamp: str, to_email: str):
     """Send formatted email using HTML."""
 
     def get_sentiment_class(score):
@@ -135,6 +136,7 @@ def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, inter
     msg_content_html = email_template.render(
         user_full_name=user_full_name,
         post_title=post_title,
+        interval_duration=interval_duration,
         interval_timestamp=interval_timestamp,
         interval_sentiment=get_sentiment_class(aggregate.interval_sentiment),
         interval_confidence=f"{aggregate.interval_confidence * 100:.1f}%",
