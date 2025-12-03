@@ -125,14 +125,20 @@ def run_consumer():
 def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, interval_timestamp: str, to_email: str):
     """Send formatted email using HTML."""
 
+    def get_sentiment_class(score):
+        if score >= 0.5:
+            return "Positive"
+        else:
+            return "Negative"
+
     # Render HTML content
     msg_content_html = email_template.render(
         user_full_name=user_full_name,
         post_title=post_title,
         interval_timestamp=interval_timestamp,
-        interval_sentiment=aggregate.interval_sentiment,
+        interval_sentiment=get_sentiment_class(aggregate.interval_sentiment),
         interval_confidence=f"{aggregate.interval_confidence * 100:.1f}%",
-        overall_sentiment=aggregate.overall_sentiment,
+        overall_sentiment=get_sentiment_class(aggregate.overall_sentiment),
         overall_confidence=f"{aggregate.overall_confidence * 100:.1f}%",
     )
     
