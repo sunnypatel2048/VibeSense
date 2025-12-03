@@ -50,7 +50,7 @@ def run_consumer():
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 
         channel.basic_consume(queue="analysis_queue", on_message_callback=callback)
-        logger.info("NLP Consumer started")
+        logger.info("AI Consumer started")
         channel.start_consuming()
 
     consume()
@@ -59,7 +59,7 @@ def process_batch(texts: List[str]) -> List[AnalysisOutput]:
     """Process batch with AI models."""
     try:
         sent_results = sentiment_pipe(texts, batch_size=32, truncation=True)
-        sum_results = summary_pipe(texts, max_length=100, min_length=30, batch_size=32, truncation=True)
+        sum_results = summary_pipe(texts, max_length=48, min_length=24, batch_size=32, truncation=True)
         outputs = []
         for sent, sum in zip(sent_results, sum_results):
             #logger.log(sent)
