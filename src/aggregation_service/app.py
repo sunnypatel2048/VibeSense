@@ -58,6 +58,7 @@ def run_consumer():
         channel.queue_declare(queue="notification_queue", durable=True)
 
         def callback(ch, method, properties, body):
+            db = SessionLocal()
             try:
                 data = json.loads(body)
                 results = [AnalysisOutput(**r) for r in data['results']]
@@ -65,26 +66,30 @@ def run_consumer():
 
                 # Aggregate Interval
                 df = pd.DataFrame([r.model_dump() for r in results])
-                avg_sentiment = df['confidence'].mean()
-                ci = scipy.stats.norm.interval(0.95, loc=avg_sentiment, scale=df['confidence'].std() / len(df)**0.5)
+                df['sentiment_numeric'] = df['sentiment'].map({'NEGATIVE': 0, 'POSITIVE': 1})
+                avg_sentiment = df['sentiment_numeric'].mean()
+                avg_confidence = df['confidence'].mean()
 
                 # Store in DB
-                db = SessionLocal()
                 interval_result = IntervalResultDB(
                     job_id=metadata['job_id'],
                     timestamp=datetime.fromisoformat(metadata['interval_timestamp']),
                     avg_sentiment=avg_sentiment,
-                    confidence_interval=list(ci)
+                    avg_confidence=avg_confidence,
                 )
                 db.add(interval_result)
                 db.commit()
-                db.close()
+                
+                sentiment = db.query(IntervalResultDB).filter(IntervalResultDB.job_id == metadata['job_id']).all()
+                overall_sentiment = sum([s.avg_sentiment for s in sentiment]) / len(sentiment)
+                overall_confidence = sum([s.avg_confidence for s in sentiment]) / len(sentiment)
 
                 # Publish to Notification
                 payload = {**metadata, 'aggregate': Aggregate(
                     interval_sentiment=avg_sentiment,
-                    overall_sentiment=0.0,  # Compute full overall in notification if needed
-                    ci=ci
+                    interval_confidence=avg_confidence,
+                    overall_sentiment=overall_sentiment,
+                    overall_confidence=overall_confidence
                 ).model_dump()}
                 ch.basic_publish(exchange='', routing_key="notification_queue", body=json.dumps(payload))
                 ch.basic_ack(delivery_tag=method.delivery_tag)
@@ -92,6 +97,8 @@ def run_consumer():
             except Exception as e:
                 logger.error("Aggregation failed", error=str(e))
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            finally:
+                db.close()
 
         channel.basic_consume(queue="aggregation_queue", on_message_callback=callback)
         logger.info("Aggregation Consumer started")

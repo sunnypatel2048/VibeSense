@@ -62,5 +62,5 @@ class AnalysisOutput(BaseModel):
 class Aggregate(BaseModel):
     interval_sentiment: float
     overall_sentiment: float
-    interval_ci: Tuple[float, float] # confidence interval for the interval
-    overall_ci: Tuple[float, float]
+    interval_confidence: float
+    overall_confidence: float

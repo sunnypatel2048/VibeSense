@@ -59,7 +59,7 @@ def process_batch(texts: List[str]) -> List[AnalysisOutput]:
     try:
         sent_results = sentiment_pipe(texts, batch_size=32, truncation=True)
         outputs = []
-        for sent in zip(sent_results):
+        for sent in sent_results:
             output = AnalysisOutput(
                 text="",
                 sentiment=sent['label'],
