@@ -14,6 +14,7 @@ class MonitoringJobDB(Base):
     job_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     post_id = Column(String, nullable=False)
     post_title = Column(String)
+    user_full_name = Column(String, nullable=False)
     email = Column(String, nullable=False)
     intervals_seconds = Column(Float, nullable=False)  # e.g., 14400 for 4 hours
     total_duration_seconds = Column(Float, nullable=False)  # e.g., 86400 for 1 day
@@ -45,6 +46,7 @@ class MonitoringJob(BaseModel):
     intervals: float
     total_duration: float
     email: EmailStr
+    user_full_name: str
 
 class CommentData(BaseModel):
     comment_id: str
