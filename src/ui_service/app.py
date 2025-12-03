@@ -76,8 +76,12 @@ if submit_button:
                 post_title=title,
                 intervals=intervals,
                 total_duration=total_duration,
+                user_full_name=full_name,
                 email=email
             )
+
+            job.intervals = float(60)
+            job.total_duration = float(120)
 
             # Queue Job
             connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
@@ -92,6 +96,7 @@ if submit_button:
                     job_id=job.job_id,
                     post_id=job.post_id,
                     post_title=job.post_title,
+                    user_full_name=job.user_full_name,
                     email=job.email,
                     intervals_seconds=job.intervals,
                     total_duration_seconds=job.total_duration,

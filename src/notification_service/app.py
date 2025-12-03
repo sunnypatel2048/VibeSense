@@ -4,15 +4,19 @@ from dotenv import load_dotenv
 import os
 import pika
 import json
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import structlog
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from jinja2 import Template
-from src.models import Aggregate
+from src.models import Aggregate, Base, MonitoringJobDB
 
 load_dotenv()
 RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+DB_URL = os.getenv("DB_URL")
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
@@ -22,32 +26,62 @@ FROM_EMAIL = SMTP_USER
 app = FastAPI(title="Notification Service")
 logger = structlog.get_logger()
 
-# Email Template (Jinja2)
+# DB Setup
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base.metadata.create_all(bind=engine)
+
+# Email Template (Jinja2) - using HTML
 email_template = Template("""
-Hi {{ full_name }},
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .container { font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+  .header { font-size: 24px; font-weight: bold; color: #0056b3; margin-bottom: 15px; }
+  .section-title { font-size: 18px; font-weight: bold; color: #444; margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+  .highlight-card { background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 15px; }
+  .sentiment-positive { color: #28a745; font-weight: bold; }
+  .sentiment-neutral { color: #ffc107; font-weight: bold; }
+  .sentiment-negative { color: #dc3545; font-weight: bold; }
+  .footer { font-size: 12px; color: #777; margin-top: 20px; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">🚀 VibeSense Alert</div>
+    <p>Hi {{user_full_name}},</p>
+    <p>Exciting update! We've analyzed the latest comments on your video <strong>"{{ post_title }}"</strong> up to {{ interval_timestamp }}. Here's what the buzz is saying:</p>
 
-Exciting update! We've analyzed the latest comments on your video up to {{ interval_timestamp }}. Here's what the buzz is saying:
+    <div class="section-title">🌟 Interval Highlights</div>
+    <div class="highlight-card">
+      <p>Average Sentiment: <span class="sentiment-{{ interval_sentiment | lower }}">{{ interval_sentiment }}</span> (Confidence: {{ ci[0] }} - {{ ci[1] }})</p>
+      <p>Key Summary: {{ summary }}</p>
+    </div>
 
-**Interval Highlights** 🌟:
-- Average Sentiment: {{ interval_sentiment }} (Confidence Range: {{ ci[0] }} - {{ ci[1] }})
-- Key Summary: {{ summary }}
+    <div class="section-title">📈 Overall Trends So Far</div>
+     <div class="highlight-card">
+      <p>Average Sentiment: <span class="sentiment-{{ overall_sentiment | lower }}">{{ overall_sentiment }}</span> (Confidence: {{ ci[0] }} - {{ ci[1] }})</p>
+      <p>Big Picture: {{ overall_summary }}</p>
+    </div>
 
-**Overall Trends So Far** 📈:
-- Average Sentiment: {{ overall_sentiment }} (Confidence Range: {{ ci[0] }} - {{ ci[1] }})
-- Big Picture: {{ overall_summary }}
+    <p>Act on these insights—reply to comments or tweak your content to boost engagement!</p>
 
-Act on these insights—reply to comments or tweak your content to boost engagement!
-
-Stay tuned for more,
-The VibeSense Team
-P.S. Questions? Reply to this email.
+    <div class="footer">
+      <p>Stay tuned for more,<br>The VibeSense Team</p>
+      <p>P.S. Questions? Reply to this email.</p>
+    </div>
+  </div>
+</body>
+</html>
 """)
 
 # API Endpoint for Manual Testing
 @app.post("/notify/{job_id}")
 async def notify_manual(job_id: str, aggregate: Aggregate):
     """Manual email trigger for testing."""
-    send_email("test_post_id", aggregate, datetime.now(timezone.utc), "spatel48@umbc.edu", "Test Summary")
+    # Note: full_name variable is not passed to send_email in the original implementation
+    send_email("Test User", "Test Post Title", aggregate, datetime.now(timezone.utc).isoformat(), "spatel48@umbc.edu", "Test Overall Summary")
     return {"status": "Email sent"}
 
 # Queue Consumer (Run in Worker Process)
@@ -60,21 +94,30 @@ def run_consumer():
         channel.queue_declare(queue="notification_queue", durable=True)
 
         def callback(ch, method, properties, body):
+            db = SessionLocal()
             try:
                 data = json.loads(body)
                 aggregate = Aggregate(**data['aggregate'])
                 metadata = {k: v for k, v in data.items() if k != 'aggregate'}
-                email = metadata.get('email', 'default@email.com')  # From job
-                post_id = metadata.get('post_id', 'unknown')
+
+                job = db.query(MonitoringJobDB).filter(MonitoringJobDB.job_id == metadata['job_id']).first()
+                if not job:
+                    raise ValueError("Job not found in DB")
+
+                user_full_name = job.user_full_name
+                email = job.email
+                post_title = job.post_title
                 interval_timestamp = metadata.get('interval_timestamp')
                 overall_summary = "Overall summary placeholder"  # Compute or fetch from DB if needed
 
-                send_email(post_id, aggregate, interval_timestamp, email, overall_summary)
+                send_email(user_full_name, post_title, aggregate, interval_timestamp, email, overall_summary)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 logger.info("Email sent", job_id=metadata.get('job_id'))
             except Exception as e:
                 logger.error("Notification failed", error=str(e))
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            finally:
+                db.close()
 
         channel.basic_consume(queue="notification_queue", on_message_callback=callback)
         logger.info("Notification Consumer started")
@@ -82,22 +125,32 @@ def run_consumer():
 
     consume()
 
-def send_email(post_id: str, aggregate: Aggregate, interval_timestamp: str, to_email: str, overall_summary: str):
-    """Send formatted email."""
-    msg_content = email_template.render(
-        post_id=post_id,
+def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, interval_timestamp: str, to_email: str, overall_summary: str):
+    """Send formatted email using HTML."""
+
+    # Render HTML content
+    msg_content_html = email_template.render(
+        user_full_name=user_full_name,
+        post_title=post_title,
         interval_timestamp=interval_timestamp,
         interval_sentiment=aggregate.interval_sentiment,
-        ci=aggregate.ci,
+        ci=[f"{c * 100:.1f}%" for c in aggregate.ci],
         summary=aggregate.summary,
         overall_sentiment=aggregate.overall_sentiment,
         overall_summary=overall_summary
     )
-    msg = MIMEText(msg_content)
+    
+    # Create the root message and set the headers
+    msg = MIMEMultipart('alternative')
     msg['From'] = FROM_EMAIL
     msg['To'] = to_email
-    msg['Subject'] = f"🚀 VibeSense Alert: Fresh Insights for Your Video - {post_id}"
+    msg['Subject'] = f"🚀 VibeSense Alert: Fresh Insights for Your Video - {post_title}"
 
+    # Attach HTML version
+    msg_html_part = MIMEText(msg_content_html, 'html')
+    msg.attach(msg_html_part)
+
+    # Send the email
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.starttls()
         server.login(SMTP_USER, SMTP_PASS)
