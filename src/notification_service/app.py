@@ -137,7 +137,7 @@ def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, inter
         user_full_name=user_full_name,
         post_title=post_title,
         interval_duration=interval_duration,
-        interval_timestamp=interval_timestamp,
+        interval_timestamp=datetime.fromisoformat(interval_timestamp).strftime("%B %d, %Y at %I:%M %p %Z"),
         interval_sentiment=get_sentiment_class(aggregate.interval_sentiment),
         interval_confidence=f"{aggregate.interval_confidence * 100:.1f}%",
         overall_sentiment=get_sentiment_class(aggregate.overall_sentiment),
