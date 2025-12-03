@@ -91,7 +91,7 @@ def dynamic_schedule():
     db = SessionLocal()
     schedule = {}
     try:
-        jobs = db.query(MonitoringJobDB).all()
+        jobs = db.query(MonitoringJobDB).filter(MonitoringJobDB.is_scheduled == False).all()
         for job in jobs:
             logger.info("Scheduling job", job_id=job.job_id)
             # Only schedule if job is still active (within total_duration)
@@ -104,6 +104,8 @@ def dynamic_schedule():
                     "schedule": interval_seconds,
                     "args": ({"job_id": str(job.job_id), "post_id": job.post_id},)
                 }
+                job.is_scheduled = True
+                db.commit()
                 logger.info("Job scheduled", job_id=job.job_id, interval_seconds=interval_seconds)
     finally:
         db.close()
