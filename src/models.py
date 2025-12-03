@@ -28,7 +28,7 @@ class IntervalResultDB(Base):
     job_id = Column(UUID(as_uuid=True), ForeignKey("monitoring_jobs.job_id"), nullable=False)
     timestamp = Column(DateTime, nullable=False)
     avg_sentiment = Column(Float)
-    confidence_interval = Column(ARRAY(Float))  # [low, high]
+    avg_confidence = Column(Float)
     summary = Column(String)
     raw_comments = Column(JSON)  # Store list of CommentData JSON for history
 
@@ -57,7 +57,7 @@ class CommentData(BaseModel):
 class AnalysisOutput(BaseModel):
     text: str
     sentiment: str  # "POSITIVE", "NEGATIVE"
-    confidence: float  # 0.0-1.0
+    confidence: float
 
 class Aggregate(BaseModel):
     interval_sentiment: float
