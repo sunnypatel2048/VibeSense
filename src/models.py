@@ -1,11 +1,10 @@
 from pydantic import BaseModel, EmailStr, validator
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, String, Float, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from uuid import uuid4
-import re  # For duration parsing
 
 Base = declarative_base()
 
@@ -18,6 +17,7 @@ class MonitoringJobDB(Base):
     email = Column(String, nullable=False)
     intervals_seconds = Column(Float, nullable=False)  # e.g., 14400 for 4 hours
     total_duration_seconds = Column(Float, nullable=False)  # e.g., 86400 for 1 day
+    is_scheduled = Column(Boolean, default=False)
     last_fetched_at = Column(DateTime, default=None)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
