@@ -67,7 +67,6 @@ def run_consumer():
                 df = pd.DataFrame([r.model_dump() for r in results])
                 avg_sentiment = df['confidence'].mean()
                 ci = scipy.stats.norm.interval(0.95, loc=avg_sentiment, scale=df['confidence'].std() / len(df)**0.5)
-                summary = " ".join(df['summary'].tolist())  # Or use advanced summarization
 
                 # Store in DB
                 db = SessionLocal()
@@ -75,8 +74,7 @@ def run_consumer():
                     job_id=metadata['job_id'],
                     timestamp=datetime.fromisoformat(metadata['interval_timestamp']),
                     avg_sentiment=avg_sentiment,
-                    confidence_interval=list(ci),
-                    summary=summary
+                    confidence_interval=list(ci)
                 )
                 db.add(interval_result)
                 db.commit()
@@ -86,8 +84,7 @@ def run_consumer():
                 payload = {**metadata, 'aggregate': Aggregate(
                     interval_sentiment=avg_sentiment,
                     overall_sentiment=0.0,  # Compute full overall in notification if needed
-                    ci=ci,
-                    summary=summary
+                    ci=ci
                 ).model_dump()}
                 ch.basic_publish(exchange='', routing_key="notification_queue", body=json.dumps(payload))
                 ch.basic_ack(delivery_tag=method.delivery_tag)
