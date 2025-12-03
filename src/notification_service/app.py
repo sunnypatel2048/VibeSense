@@ -4,15 +4,18 @@ from dotenv import load_dotenv
 import os
 import pika
 import json
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import structlog
 import smtplib
 from email.mime.text import MIMEText
 from jinja2 import Template
-from src.models import Aggregate
+from src.models import Aggregate, Base, MonitoringJobDB
 
 load_dotenv()
 RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+DB_URL = os.getenv("DB_URL")
 SMTP_SERVER = os.getenv("SMTP_SERVER")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
@@ -21,6 +24,11 @@ FROM_EMAIL = SMTP_USER
 
 app = FastAPI(title="Notification Service")
 logger = structlog.get_logger()
+
+# DB Setup
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base.metadata.create_all(bind=engine)
 
 # Email Template (Jinja2)
 email_template = Template("""
@@ -60,16 +68,22 @@ def run_consumer():
         channel.queue_declare(queue="notification_queue", durable=True)
 
         def callback(ch, method, properties, body):
+            db = SessionLocal()
             try:
                 data = json.loads(body)
                 aggregate = Aggregate(**data['aggregate'])
                 metadata = {k: v for k, v in data.items() if k != 'aggregate'}
-                email = metadata.get('email', 'default@email.com')  # From job
-                post_id = metadata.get('post_id', 'unknown')
+
+                job = db.query(MonitoringJobDB).filter(MonitoringJobDB.job_id == metadata['job_id']).first()
+                if not job:
+                    raise ValueError("Job not found in DB")
+
+                email = job.email
+                post_title = job.post_title
                 interval_timestamp = metadata.get('interval_timestamp')
                 overall_summary = "Overall summary placeholder"  # Compute or fetch from DB if needed
 
-                send_email(post_id, aggregate, interval_timestamp, email, overall_summary)
+                send_email(post_title, aggregate, interval_timestamp, email, overall_summary)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 logger.info("Email sent", job_id=metadata.get('job_id'))
             except Exception as e:
@@ -82,10 +96,10 @@ def run_consumer():
 
     consume()
 
-def send_email(post_id: str, aggregate: Aggregate, interval_timestamp: str, to_email: str, overall_summary: str):
+def send_email(post_title: str, aggregate: Aggregate, interval_timestamp: str, to_email: str, overall_summary: str):
     """Send formatted email."""
     msg_content = email_template.render(
-        post_id=post_id,
+        post_title=post_title,
         interval_timestamp=interval_timestamp,
         interval_sentiment=aggregate.interval_sentiment,
         ci=aggregate.ci,
@@ -96,7 +110,7 @@ def send_email(post_id: str, aggregate: Aggregate, interval_timestamp: str, to_e
     msg = MIMEText(msg_content)
     msg['From'] = FROM_EMAIL
     msg['To'] = to_email
-    msg['Subject'] = f"🚀 VibeSense Alert: Fresh Insights for Your Video - {post_id}"
+    msg['Subject'] = f"🚀 VibeSense Alert: Fresh Insights for Your Video - {post_title}"
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
         server.starttls()
