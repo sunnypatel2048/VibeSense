@@ -80,6 +80,9 @@ if submit_button:
                 email=email
             )
 
+            job.intervals = float(60)
+            job.total_duration = float(120)
+
             # Queue Job
             connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
             channel = connection.channel()
