@@ -55,12 +55,12 @@ email_template = Template("""
 
     <div class="section-title">🌟 Interval Highlights</div>
     <div class="highlight-card">
-      <p>Average Sentiment: <span class="sentiment-{{ interval_sentiment | lower }}">{{ interval_sentiment }}</span> (Confidence: {{ ci[0] }} - {{ ci[1] }})</p>
+      <p>Average Sentiment: <span class="sentiment-{{ interval_sentiment | lower }}">{{ interval_sentiment }}</span> (Confidence: {{ interval_confidence }})</p>
     </div>
 
     <div class="section-title">📈 Overall Trends So Far</div>
      <div class="highlight-card">
-      <p>Average Sentiment: <span class="sentiment-{{ overall_sentiment | lower }}">{{ overall_sentiment }}</span> (Confidence: {{ ci[0] }} - {{ ci[1] }})</p>
+      <p>Average Sentiment: <span class="sentiment-{{ overall_sentiment | lower }}">{{ overall_sentiment }}</span> (Confidence: {{ overall_confidence }})</p>
     </div>
 
     <p>Act on these insights—reply to comments or tweak your content to boost engagement!</p>
@@ -79,7 +79,7 @@ email_template = Template("""
 async def notify_manual(job_id: str, aggregate: Aggregate):
     """Manual email trigger for testing."""
     # Note: full_name variable is not passed to send_email in the original implementation
-    send_email("Test User", "Test Post Title", aggregate, datetime.now(timezone.utc).isoformat(), "spatel48@umbc.edu")
+    send_email("Test User", "Test Post Title", aggregate, datetime.now(timezone.utc).isoformat(), "test@domain.com")
     return {"status": "Email sent"}
 
 # Queue Consumer (Run in Worker Process)
@@ -131,8 +131,9 @@ def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, inter
         post_title=post_title,
         interval_timestamp=interval_timestamp,
         interval_sentiment=aggregate.interval_sentiment,
-        ci=[f"{c * 100:.1f}%" for c in aggregate.ci],
-        overall_sentiment=aggregate.overall_sentiment
+        interval_confidence=f"{aggregate.interval_confidence * 100:.1f}%",
+        overall_sentiment=aggregate.overall_sentiment,
+        overall_confidence=f"{aggregate.overall_confidence * 100:.1f}%",
     )
     
     # Create the root message and set the headers
