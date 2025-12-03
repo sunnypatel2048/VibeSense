@@ -56,13 +56,11 @@ email_template = Template("""
     <div class="section-title">🌟 Interval Highlights</div>
     <div class="highlight-card">
       <p>Average Sentiment: <span class="sentiment-{{ interval_sentiment | lower }}">{{ interval_sentiment }}</span> (Confidence: {{ ci[0] }} - {{ ci[1] }})</p>
-      <p>Key Summary: {{ summary }}</p>
     </div>
 
     <div class="section-title">📈 Overall Trends So Far</div>
      <div class="highlight-card">
       <p>Average Sentiment: <span class="sentiment-{{ overall_sentiment | lower }}">{{ overall_sentiment }}</span> (Confidence: {{ ci[0] }} - {{ ci[1] }})</p>
-      <p>Big Picture: {{ overall_summary }}</p>
     </div>
 
     <p>Act on these insights—reply to comments or tweak your content to boost engagement!</p>
@@ -81,7 +79,7 @@ email_template = Template("""
 async def notify_manual(job_id: str, aggregate: Aggregate):
     """Manual email trigger for testing."""
     # Note: full_name variable is not passed to send_email in the original implementation
-    send_email("Test User", "Test Post Title", aggregate, datetime.now(timezone.utc).isoformat(), "spatel48@umbc.edu", "Test Overall Summary")
+    send_email("Test User", "Test Post Title", aggregate, datetime.now(timezone.utc).isoformat(), "spatel48@umbc.edu")
     return {"status": "Email sent"}
 
 # Queue Consumer (Run in Worker Process)
@@ -108,9 +106,8 @@ def run_consumer():
                 email = job.email
                 post_title = job.post_title
                 interval_timestamp = metadata.get('interval_timestamp')
-                overall_summary = "Overall summary placeholder"  # Compute or fetch from DB if needed
 
-                send_email(user_full_name, post_title, aggregate, interval_timestamp, email, overall_summary)
+                send_email(user_full_name, post_title, aggregate, interval_timestamp, email)
                 ch.basic_ack(delivery_tag=method.delivery_tag)
                 logger.info("Email sent", job_id=metadata.get('job_id'))
             except Exception as e:
@@ -125,7 +122,7 @@ def run_consumer():
 
     consume()
 
-def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, interval_timestamp: str, to_email: str, overall_summary: str):
+def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, interval_timestamp: str, to_email: str):
     """Send formatted email using HTML."""
 
     # Render HTML content
@@ -135,9 +132,7 @@ def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, inter
         interval_timestamp=interval_timestamp,
         interval_sentiment=aggregate.interval_sentiment,
         ci=[f"{c * 100:.1f}%" for c in aggregate.ci],
-        summary=aggregate.summary,
-        overall_sentiment=aggregate.overall_sentiment,
-        overall_summary=overall_summary
+        overall_sentiment=aggregate.overall_sentiment
     )
     
     # Create the root message and set the headers

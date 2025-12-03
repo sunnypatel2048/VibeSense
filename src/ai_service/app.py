@@ -17,12 +17,11 @@ logger = structlog.get_logger()
 
 # Load Models
 sentiment_pipe = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-summary_pipe = pipeline("summarization", model="facebook/bart-large-cnn")
 
 # API Endpoint for Sync Testing
 @app.post("/analyze/", response_model=List[AnalysisOutput])
 async def analyze_text(texts: List[str]):
-    """Process text batches for sentiment and summary."""
+    """Process text batches for sentiment."""
     return process_batch(texts)
 
 # Queue Consumer (Run in Worker Process)
@@ -59,15 +58,12 @@ def process_batch(texts: List[str]) -> List[AnalysisOutput]:
     """Process batch with AI models."""
     try:
         sent_results = sentiment_pipe(texts, batch_size=32, truncation=True)
-        sum_results = summary_pipe(texts, max_length=48, min_length=24, batch_size=32, truncation=True)
         outputs = []
-        for sent, sum in zip(sent_results, sum_results):
-            #logger.log(sent)
+        for sent in zip(sent_results):
             output = AnalysisOutput(
                 text="",
                 sentiment=sent['label'],
                 confidence=sent['score'],
-                summary=sum['summary_text']
             )
             outputs.append(output)
         return outputs
