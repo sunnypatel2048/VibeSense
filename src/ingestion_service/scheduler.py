@@ -1,14 +1,22 @@
+import os
 from celery import Celery
+from redbeat.schedulers import RedBeatScheduler
+from dotenv import load_dotenv
+
+load_dotenv()
+REDIS_URL = os.getenv("REDIS_URL")
 
 def configure_celery_beat(app: Celery):
-    """Configure Celery Beat with dynamic schedule."""
+    """Configure Celery Beat with RedBeat for dynamic scheduling."""
+    
+    app.conf.beat_scheduler = RedBeatScheduler
+    app.conf.redbeat_redis_url = REDIS_URL
+    app.conf.beat_max_loop_interval = 60
+
     app.conf.beat_schedule = {
         "refresh-schedule": {
-            "task": "src.ingestion_service.tasks.refresh_schedule_task",
+            "task": "src.ingestion_service.tasks.refresh_dynamic_schedule",
             "schedule": 60,
+            "args": ()
         }
     }
-    #app.conf.beat_schedule_filename = "celerybeat-schedule"
-    #app.conf.beat_max_loop_interval = 60  # Check for schedule updates every minute
-
-    # Refresh schedule is is adding jobs from db, then iprocess_job_task is scheduled, but it never runs?
