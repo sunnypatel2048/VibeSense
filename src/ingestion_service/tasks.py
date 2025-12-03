@@ -10,7 +10,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 import structlog
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 load_dotenv()
 DB_URL = os.getenv("DB_URL")
@@ -20,7 +20,7 @@ engine = create_engine(DB_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 logger = structlog.get_logger()
 
-@celery_app.task
+@celery_app.task(name='src.ingestion_service.tasks.process_job_task')
 @retry(stop=stop_after_attempt(5), wait=wait_exponential(multiplier=1, min=4, max=60))
 def process_job(job_data: dict):
     logger.info("Processing job", job_id=job_data['job_id'])
@@ -78,3 +78,33 @@ def process_job(job_data: dict):
     except Exception as e:
         logger.error("Ingestion failed", job_id=job_data['job_id'], error=str(e))
         raise
+
+@celery_app.task(name='src.ingestion_service.tasks.refresh_schedule_task')
+def refresh_schedule_task():
+    """Refresh Celery Beat schedule."""
+    logger.info("Refreshing Celery Beat schedule")
+    celery_app.conf.beat_schedule.update(dynamic_schedule())
+
+
+def dynamic_schedule():
+    """Generate dynamic schedule based on MonitoringJobDB."""
+    db = SessionLocal()
+    schedule = {}
+    try:
+        jobs = db.query(MonitoringJobDB).all()
+        for job in jobs:
+            logger.info("Scheduling job", job_id=job.job_id)
+            # Only schedule if job is still active (within total_duration)
+            expiration_time_naive = job.created_at + timedelta(seconds=job.total_duration_seconds)
+            expiration_time_aware = expiration_time_naive.replace(tzinfo=timezone.utc)
+            if expiration_time_aware > datetime.now(timezone.utc):
+                interval_seconds = job.intervals_seconds
+                schedule[f"ingest-job-{job.job_id}"] = {
+                    "task": "src.ingestion_service.tasks.process_job_task",
+                    "schedule": interval_seconds,
+                    "args": ({"job_id": str(job.job_id), "post_id": job.post_id},)
+                }
+                logger.info("Job scheduled", job_id=job.job_id, interval_seconds=interval_seconds)
+    finally:
+        db.close()
+        return schedule

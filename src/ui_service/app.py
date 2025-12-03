@@ -7,13 +7,20 @@ from uuid import uuid4
 from datetime import timedelta
 import re
 import requests
-from src.models import UserInput, MonitoringJob
+from src.models import MonitoringJobDB, UserInput, MonitoringJob
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from datetime import datetime, timezone
 from pydantic import ValidationError
 from src.utils import parse_youtube_video_id
 
 load_dotenv()
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 RABBITMQ_URL = os.getenv("RABBITMQ_URL")
+DB_URL = os.getenv("DB_URL")
+
+engine = create_engine(DB_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 st.set_page_config(page_title="VibeSense", layout="centered", initial_sidebar_state="collapsed")
 st.markdown("""
@@ -78,6 +85,25 @@ if submit_button:
             channel.queue_declare(queue="monitoring_jobs", durable=True)
             channel.basic_publish(exchange='', routing_key="monitoring_jobs", body=json.dumps(job.model_dump()))
             connection.close()
+
+            db = SessionLocal()
+            try:
+                job_db = MonitoringJobDB(
+                    job_id=job.job_id,
+                    post_id=job.post_id,
+                    post_title=job.post_title,
+                    email=job.email,
+                    intervals_seconds=job.intervals,
+                    total_duration_seconds=job.total_duration,
+                    created_at=datetime.now(timezone.utc),
+                    last_fetched_at=None
+                )
+                db.add(job_db)
+                db.commit()
+            except Exception as e:
+                raise Exception(f"DB insert failed: {str(e)}") from e
+            finally:
+                db.close()
             
             st.success("Monitoring job queued successfully! You'll receive email updates.")
 
