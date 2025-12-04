@@ -21,8 +21,8 @@ sentiment_pipe = pipeline("sentiment-analysis", model="distilbert-base-uncased-f
 # API Endpoint for Sync Testing
 @app.post("/analyze/", response_model=List[AnalysisOutput])
 async def analyze_text(texts: List[str]):
-    """Process text batches for sentiment."""
-    return process_batch(texts)
+    """Process text comments for sentiment."""
+    return process_comments(texts)
 
 # Queue Consumer (Run in Worker Process)
 def run_consumer():
@@ -37,13 +37,13 @@ def run_consumer():
         def callback(ch, method, properties, body):
             try:
                 data = json.loads(body)
-                batch = data['batch']  # List of texts
-                metadata = {k: v for k, v in data.items() if k != 'batch'}
-                results = process_batch(batch)
+                comments = data['comments']  # List of texts
+                metadata = {k: v for k, v in data.items() if k != 'comments'}
+                results = process_comments(comments)
                 payload = {**metadata, 'results': [r.model_dump() for r in results]}
                 ch.basic_publish(exchange='', routing_key="aggregation_queue", body=json.dumps(payload))
                 ch.basic_ack(delivery_tag=method.delivery_tag)
-                logger.info("Batch processed and published", metadata=metadata)
+                logger.info("Comments processed and published", metadata=metadata)
             except Exception as e:
                 logger.error("Processing failed", error=str(e))
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
@@ -54,10 +54,10 @@ def run_consumer():
 
     consume()
 
-def process_batch(texts: List[str]) -> List[AnalysisOutput]:
-    """Process batch with AI models."""
+def process_comments(texts: List[str]) -> List[AnalysisOutput]:
+    """Process comments with AI model."""
     try:
-        sent_results = sentiment_pipe(texts, batch_size=32, truncation=True)
+        sent_results = sentiment_pipe(texts, batch_size=64, truncation=True)
         outputs = []
         for sent in sent_results:
             output = AnalysisOutput(

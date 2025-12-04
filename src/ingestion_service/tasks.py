@@ -54,7 +54,6 @@ def process_job(job_data: dict):
             
             # Filter new comments (published_at > last_fetched_at)
             if last_fetched_at:
-                logger.info("Filtering new comments", published_at=datetime.fromisoformat(all_comments[0]['published_at'][:-1] + '+00:00'), last_fetched_at=last_fetched_at.replace(tzinfo=timezone.utc))
                 new_comments = [c for c in all_comments if datetime.fromisoformat(c['published_at'][:-1] + '+00:00') > last_fetched_at.replace(tzinfo=timezone.utc)]
             else:
                 new_comments = all_comments
@@ -65,7 +64,6 @@ def process_job(job_data: dict):
 
             # Preprocess comments
             preprocessed = [preprocess_text(c['text']) for c in new_comments]
-            batches = [preprocessed[i:i + 50] for i in range(0, len(preprocessed), 50)]
 
             # Metadata for tracibility
             interval_timestamp = max(c['published_at'] for c in new_comments)
@@ -78,13 +76,12 @@ def process_job(job_data: dict):
             connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
             channel = connection.channel()
             channel.queue_declare(queue='analysis_queue', durable=True)
-            for batch in batches:
-                payload = { **metadata, 'batch': batch }
-                channel.basic_publish(
-                    exchange='',
-                    routing_key='analysis_queue',
-                    body=json.dumps(payload)
-                )
+            payload = { **metadata, 'comments': preprocessed }
+            channel.basic_publish(
+                exchange='',
+                routing_key='analysis_queue',
+                body=json.dumps(payload)
+            )
             connection.close()
 
             new_last_fetched_at = max(datetime.fromisoformat(c['published_at'][:-1] + '+00:00') for c in new_comments) if new_comments else datetime.now(timezone.utc)
