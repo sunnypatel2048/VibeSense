@@ -127,10 +127,12 @@ def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, inter
     """Send formatted email using HTML."""
 
     def get_sentiment_class(score):
-        if score >= 0.5:
-            return "Positive"
-        else:
+        if score < 0.67:
             return "Negative"
+        elif score < 1.33:
+            return "Neutral"
+        else:
+            return "Positive"
 
     # Render HTML content
     msg_content_html = email_template.render(

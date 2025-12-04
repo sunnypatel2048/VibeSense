@@ -16,7 +16,10 @@ app = FastAPI(title="AI Service")
 logger = structlog.get_logger()
 
 # Load Models
-sentiment_pipe = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+sentiment_pipe = pipeline(
+    "sentiment-analysis",
+    model="tabularisai/multilingual-sentiment-analysis"
+)
 
 # API Endpoint for Sync Testing
 @app.post("/analyze/", response_model=List[AnalysisOutput])

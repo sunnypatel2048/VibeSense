@@ -66,8 +66,15 @@ def run_consumer():
 
                 # Aggregate Interval
                 df = pd.DataFrame([r.model_dump() for r in results])
-                df['sentiment_numeric'] = df['sentiment'].map({'NEGATIVE': 0, 'POSITIVE': 1})
-                avg_sentiment = df['sentiment_numeric'].mean()
+                mapping = {
+                    'Very Negative': 0,
+                    'Negative': 0,
+                    'Neutral': 1,
+                    'Positive': 2,
+                    'Very Positive': 2
+                }
+                df['sentiment_numeric'] = df['sentiment'].map(mapping)
+                avg_sentiment = avg_sentiment = (df['sentiment_numeric'] * df['confidence']).sum() / df['confidence'].sum() # Weighted average
                 avg_confidence = df['confidence'].mean()
 
                 # Store in DB
