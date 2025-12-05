@@ -126,6 +126,14 @@ def run_consumer():
 def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, interval_duration: float, interval_timestamp: str, to_email: str):
     """Send formatted email using HTML."""
 
+    def get_confidence_class(confidence):
+        if confidence < 0.4:
+            return "Uncertain"
+        elif confidence < 0.66:
+            return "Moderate"
+        else:
+            return "High"
+    
     def get_sentiment_class(score):
         if score < 0.67:
             return "Negative"
@@ -141,9 +149,9 @@ def send_email(user_full_name: str, post_title: str, aggregate: Aggregate, inter
         interval_duration=interval_duration,
         interval_timestamp=datetime.fromisoformat(interval_timestamp).strftime("%B %d, %Y at %I:%M %p %Z"),
         interval_sentiment=get_sentiment_class(aggregate.interval_sentiment),
-        interval_confidence=f"{aggregate.interval_confidence * 100:.1f}%",
+        interval_confidence=get_confidence_class(aggregate.interval_confidence),
         overall_sentiment=get_sentiment_class(aggregate.overall_sentiment),
-        overall_confidence=f"{aggregate.overall_confidence * 100:.1f}%",
+        overall_confidence=get_confidence_class(aggregate.overall_confidence),
     )
     
     # Create the root message and set the headers
